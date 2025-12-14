@@ -59,7 +59,7 @@ class Fileutil:
   def list(self, path):
     try:
       output = self._sh(self._ls.format(path))
-      return [x.rstrip('/') for x in output.decode('utf-8').splitlines()]
+      return [x.rstrip('/\\') for x in output.decode('utf-8').splitlines()]
     except RuntimeError as e:
       print(e)
       return []
@@ -120,7 +120,7 @@ class WithFileCache:
     return self.localfs.open(localpath, seek, limit)
 
   def _getfile(self, path):
-    name = str(path).replace(':', '').replace('//', '/').replace('/', ':')
+    name = str(path).replace(':', '_').replace('/', '_').replace('\\', '_')
     localpath = self.cachedir / name
     if not localpath.exists():
       buffer = self.fs.read(path)

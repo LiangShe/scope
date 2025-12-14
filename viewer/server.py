@@ -2,6 +2,7 @@ import concurrent.futures
 import functools
 import pathlib
 import struct
+import os
 import sys
 
 import fastapi
@@ -20,7 +21,7 @@ app = fastapi.FastAPI(
     # Support extended JSON (NaN, Inf, -Inf).
     default_response_class=fastapi.responses.ORJSONResponse,
 )
-basedir = config.basedir.rstrip('/')
+basedir = config.basedir.rstrip('/\\')
 fs = dict(
   elements=filesystems.Elements,
   fileutil=filesystems.Fileutil,
@@ -37,27 +38,28 @@ else:
 @app.get('/api/exps')
 def get_exps():
   print('GET /exps', flush=True)
-  folders = fs.list(basedir)
-  expids = [x.rsplit('/', 1)[-1] for x in folders]
+  folders = fs.list(basedir) # These are full paths
+  expids = [pathlib.Path(x).name for x in folders]
   return {'exps': expids}
 
 
 @app.get('/api/exp/{expid}')
 def get_exp(expid: str):
   print(f'GET /exp/{expid}', flush=True)
-  folders = find_runs(basedir + '/' + expid)
-  folders = [x.removeprefix(str(basedir))[1:] for x in folders]
-  runids = [x.replace('/', ':') for x in folders]
+  folders = find_runs(os.path.join(basedir, expid))
+  folders = [x.removeprefix(basedir + os.path.sep) for x in folders]
+  runids = [x.replace(os.path.sep, ':') for x in folders]
   return {'id': expid, 'runs': runids}
 
 
 @app.get('/api/run/{runid}')
 def get_run(runid: str):
   print(f'GET /run/{runid}', flush=True)
-  folder = basedir + '/' + runid.replace(':', '/') + '/scope'
+  folder = os.path.join(basedir, runid.replace(':', os.path.sep), 'scope')
   children = fs.list(folder)
-  children = [x.removeprefix(str(basedir))[1:] for x in children]
-  colids = [x.replace('/', ':') for x in children]
+  # fs.list returns full paths
+  children = [x.removeprefix(folder + os.path.sep) for x in children]
+  colids = [runid + ':scope:' + x.replace(os.path.sep, ':') for x in children]
   return {'id': runid, 'cols': colids}
 
 
@@ -65,7 +67,7 @@ def get_run(runid: str):
 def get_col(colid: str):
   print(f'GET /col/{colid}', flush=True)
   ext = colid.rsplit('.', 1)[-1]
-  path = basedir + '/' + colid.replace(':', '/')
+  path = os.path.join(basedir, colid.replace(':', os.path.sep))
   runid = colid.rsplit(':', 2)[0]  # Remove metric name and scope folder.
   if ext == 'float':
     buffer = fs.read(path)
@@ -85,7 +87,7 @@ def get_col(colid: str):
 def get_file(request: fastapi.Request, fileid: str):
   print(f'GET /file/{fileid}', flush=True)
   ext = fileid.rsplit('.', 1)[-1]
-  path = basedir + '/' + fileid.replace(':', '/')
+  path = os.path.join(basedir, fileid.replace(':', os.path.sep))
   if ext in ('txt',):
     text = cachedfs.read(path).decode('utf-8')
     return {'id': fileid, 'text': text}
@@ -111,8 +113,8 @@ def find_runs(folder, maxdepth=config.maxdepth, workers=64):
     queue = [(folder, 0)]
     while queue:
       node, depth = queue.pop(0)
-      children = fs.list(node)
-      if any(x.endswith('/scope') for x in children):
+      children = [os.path.join(node, x) for x in fs.list(node)]
+      if any(x.endswith(os.path.sep+'scope') for x in children):
         runs.append(node)
       elif depth < maxdepth:
         queue += [(x, depth + 1) for x in children]
@@ -126,7 +128,7 @@ def find_runs(folder, maxdepth=config.maxdepth, workers=64):
     while queue:
       current = queue.pop(0)
       children = current.result()
-      if any(x.endswith('/scope') for x in children):
+      if any(x.endswith(os.path.sep+'scope') for x in children):
         runs.append(current.parent)
       elif current.depth < maxdepth:
         for child in children:
