@@ -18,6 +18,7 @@ Scalable metrics logging and analysis.
 ```sh
 pip install scope
 ```
+- for windows, run ``` set PYTHONUTF8=1 ``` first
 
 ### Writing
 

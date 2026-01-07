@@ -16,9 +16,10 @@ def main():
   # Uvicorn watches cwd for changes for reload.
   os.chdir(package)
 
+  host = '127.0.0.1' if sys.platform == 'win32' else '0.0.0.0'
   uvicorn.run(
       'server:app',
-      host='0.0.0.0',
+      host=host,
       port=config.port,
       reload=config.debug,
       workers=None if config.debug else config.workers,
